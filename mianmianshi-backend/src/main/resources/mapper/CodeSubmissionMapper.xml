@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mianmianshi.platform.mapper.CodeSubmissionMapper">
+
+    <resultMap id="BaseResultMap" type="com.mianmianshi.platform.model.entity.CodeSubmission">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="questionId" column="questionId" jdbcType="BIGINT"/>
+        <result property="userId" column="userId" jdbcType="BIGINT"/>
+        <result property="language" column="language" jdbcType="VARCHAR"/>
+        <result property="code" column="code" jdbcType="VARCHAR"/>
+        <result property="status" column="status" jdbcType="VARCHAR"/>
+        <result property="passedCases" column="passedCases" jdbcType="INTEGER"/>
+        <result property="totalCases" column="totalCases" jdbcType="INTEGER"/>
+        <result property="executeTimeMs" column="executeTimeMs" jdbcType="BIGINT"/>
+        <result property="memoryUsageKb" column="memoryUsageKb" jdbcType="BIGINT"/>
+        <result property="judgeResult" column="judgeResult" jdbcType="VARCHAR"/>
+        <result property="errorMessage" column="errorMessage" jdbcType="VARCHAR"/>
+        <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
+        <result property="isDelete" column="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+</mapper>
