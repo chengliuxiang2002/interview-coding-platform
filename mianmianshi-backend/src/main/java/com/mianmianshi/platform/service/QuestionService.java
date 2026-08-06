@@ -14,8 +14,8 @@ import java.util.List;
 /**
  * 题目服务
  *
- * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
- * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
+ * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
+ * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
  */
 public interface QuestionService extends IService<Question> {
 
@@ -62,7 +62,7 @@ public interface QuestionService extends IService<Question> {
     Page<Question> listQuestionByPage(QuestionQueryRequest questionQueryRequest);
 
     /**
-     * �?ES 查询题目
+     * �?ES 查询题目
      *
      * @param questionQueryRequest
      * @return
@@ -74,14 +74,21 @@ public interface QuestionService extends IService<Question> {
      *
      * @param questionIdList
      */
-
     void batchDeleteQuestions(List<Long> questionIdList);
 
     /**
+     * 通过 MQ 异步同步题目到 ES
+     *
+     * @param questionId 题目 ID
+     * @param action     操作类型：SAVE/UPDATE/DELETE
+     */
+    void syncQuestionToEsByMq(Long questionId, String action);
+
+    /**
      * AI 生成题目
-     * @param questionType 题目类型，比�?Java
-     * @param number 题目数量，比�?10
-     * @param user 创建�?
+     * @param questionType 题目类型，比�?Java
+     * @param number 题目数量，比�?10
+     * @param user 创建�?
      * @return ture / false
      */
     boolean aiGenerateQuestions(String questionType, int number, User user);

@@ -105,6 +105,26 @@ spring:
     uris: http://localhost:9200
     username: root
     password: 123456
+  # RabbitMQ 配置
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: admin123
+    virtual-host: /
+    # 发送端确认
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    # 消费端
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2.0
   # 文件上传
   servlet:
     multipart:

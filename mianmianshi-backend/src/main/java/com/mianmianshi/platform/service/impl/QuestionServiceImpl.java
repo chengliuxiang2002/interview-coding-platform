@@ -16,11 +16,13 @@ import com.mianmianshi.platform.manager.AiManager;
 import com.mianmianshi.platform.mapper.QuestionMapper;
 import com.mianmianshi.platform.model.dto.question.QuestionEsDTO;
 import com.mianmianshi.platform.model.dto.question.QuestionQueryRequest;
+import com.mianmianshi.platform.model.dto.question.QuestionSyncMessage;
 import com.mianmianshi.platform.model.entity.Question;
 import com.mianmianshi.platform.model.entity.QuestionBankQuestion;
 import com.mianmianshi.platform.model.entity.User;
 import com.mianmianshi.platform.model.vo.QuestionVO;
 import com.mianmianshi.platform.model.vo.UserVO;
+import com.mianmianshi.platform.mq.MqMessageProducer;
 import com.mianmianshi.platform.service.QuestionBankQuestionService;
 import com.mianmianshi.platform.service.QuestionService;
 import com.mianmianshi.platform.service.UserService;
@@ -50,8 +52,8 @@ import java.util.stream.Collectors;
 /**
  * 题目服务实现
  *
- * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
- * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
+ * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
+ * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
  */
 @Service
 @Slf4j
@@ -69,6 +71,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     @Resource
     private AiManager aiManager;
 
+    @Resource
+    private MqMessageProducer mqMessageProducer;
+
     /**
      * 校验数据
      *
@@ -78,7 +83,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     @Override
     public void validQuestion(Question question, boolean add) {
         ThrowUtils.throwIf(question == null, ErrorCode.PARAMS_ERROR);
-        // todo 从对象中取�?
+        // todo 从对象中取�?
         String title = question.getTitle();
         String content = question.getContent();
         // 创建数据时，参数不能为空
@@ -108,7 +113,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         if (questionQueryRequest == null) {
             return queryWrapper;
         }
-        // todo 从对象中取�?
+        // todo 从对象中取�?
         Long id = questionQueryRequest.getId();
         Long notId = questionQueryRequest.getNotId();
         String title = questionQueryRequest.getTitle();
@@ -120,9 +125,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         Long userId = questionQueryRequest.getUserId();
         String answer = questionQueryRequest.getAnswer();
         // todo 补充需要的查询条件
-        // 从多字段中搜�?
+        // 从多字段中搜�?
         if (StringUtils.isNotBlank(searchText)) {
-            // 需要拼接查询条�?
+            // 需要拼接查询条�?
             queryWrapper.and(qw -> qw.like("title", searchText).or().like("content", searchText));
         }
         // 模糊查询
@@ -159,7 +164,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         QuestionVO questionVO = QuestionVO.objToVo(question);
 
         // todo 可以根据需要为封装对象补充值，不需要的内容可以删除
-        // region 可�?
+        // region 可�?
         // 1. 关联查询用户信息
         Long userId = question.getUserId();
         User user = null;
@@ -192,7 +197,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         }).collect(Collectors.toList());
 
         // todo 可以根据需要为封装对象补充值，不需要的内容可以删除
-        // region 可�?
+        // region 可�?
         // 1. 关联查询用户信息
         Set<Long> userIdSet = questionList.stream().map(Question::getUserId).collect(Collectors.toSet());
         Map<Long, List<User>> userIdUserListMap = userService.listByIds(userIdSet).stream()
@@ -239,17 +244,17 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 // 复用原有题目表的查询条件
                 queryWrapper.in("id", questionIdSet);
             } else {
-                // 题库为空，则返回空列�?
+                // 题库为空，则返回空列�?
                 return new Page<>(current, size, 0);
             }
         }
-        // 查询数据�?
+        // 查询数据�?
         Page<Question> questionPage = this.page(new Page<>(current, size), queryWrapper);
         return questionPage;
     }
 
     /**
-     * �?ES 查询题目
+     * �?ES 查询题目
      *
      * @param questionQueryRequest
      * @return
@@ -263,13 +268,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         List<String> tags = questionQueryRequest.getTags();
         Long questionBankId = questionQueryRequest.getQuestionBankId();
         Long userId = questionQueryRequest.getUserId();
-        // 注意，ES 的起始页�?0
+        // 注意，ES 的起始页�?0
         int current = questionQueryRequest.getCurrent() - 1;
         int pageSize = questionQueryRequest.getPageSize();
         String sortField = questionQueryRequest.getSortField();
         String sortOrder = questionQueryRequest.getSortOrder();
 
-        // 构造查询条�?
+        // 构造查询条�?
         BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
         // 过滤
         boolQueryBuilder.filter(QueryBuilders.termQuery("isDelete", 0));
@@ -285,13 +290,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         if (questionBankId != null) {
             boolQueryBuilder.filter(QueryBuilders.termQuery("questionBankId", questionBankId));
         }
-        // 必须包含所有标�?
+        // 必须包含所有标�?
         if (CollUtil.isNotEmpty(tags)) {
             for (String tag : tags) {
                 boolQueryBuilder.filter(QueryBuilders.termQuery("tags", tag));
             }
         }
-        // 按关键词检�?
+        // 按关键词检�?
         if (StringUtils.isNotBlank(searchText)) {
             // title = '' or content = '' or answer = ''
             boolQueryBuilder.should(QueryBuilders.matchQuery("title", searchText));
@@ -307,7 +312,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         }
         // 分页
         PageRequest pageRequest = PageRequest.of(current, pageSize);
-        // 构造查�?
+        // 构造查�?
         NativeSearchQuery searchQuery = new NativeSearchQueryBuilder()
                 .withQuery(boolQueryBuilder)
                 .withPageable(pageRequest)
@@ -341,20 +346,53 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
             boolean result = this.removeById(questionId);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "删除题目失败");
             // 移除题目题库关系
-            // 构造查�?
+            // 构造查�?
             LambdaQueryWrapper<QuestionBankQuestion> lambdaQueryWrapper = Wrappers.lambdaQuery(QuestionBankQuestion.class)
                     .eq(QuestionBankQuestion::getQuestionId, questionId);
             result = questionBankQuestionService.remove(lambdaQueryWrapper);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "删除题目题库关联失败");
+            // 通过 MQ 异步同步删除到 ES
+            this.syncQuestionToEsByMq(questionId, "DELETE");
         }
+    }
+
+    /**
+     * 通过 MQ 异步同步题目到 ES
+     *
+     * <p>在 MySQL 写入成功后调用，发送消息到 RabbitMQ，
+     * 由消费者异步完成 ES 的写入/删除操作。不阻塞主业务流程。</p>
+     *
+     * @param questionId 题目 ID
+     * @param action     操作类型：SAVE / UPDATE / DELETE
+     */
+    @Override
+    public void syncQuestionToEsByMq(Long questionId, String action) {
+        // 获取题目当前的 updateTime 作为版本号
+        Question question = this.getById(questionId);
+        Long version = (question != null && question.getUpdateTime() != null)
+                ? question.getUpdateTime().getTime()
+                : System.currentTimeMillis();
+
+        QuestionSyncMessage.SyncAction syncAction;
+        try {
+            syncAction = QuestionSyncMessage.SyncAction.valueOf(action);
+        } catch (IllegalArgumentException e) {
+            log.error("[MQ-PRODUCER] 无效的操作类型: {}", action);
+            return;
+        }
+
+        mqMessageProducer.sendSyncMessage(questionId, syncAction, version,
+                syncAction == QuestionSyncMessage.SyncAction.DELETE
+                        ? QuestionSyncMessage.PRIORITY_HIGH
+                        : QuestionSyncMessage.PRIORITY_NORMAL);
     }
 
     /**
      * AI 生成题目
      *
-     * @param questionType 题目类型，比�?Java
-     * @param number       题目数量，比�?10
-     * @param user         创建�?
+     * @param questionType 题目类型，比�?Java
+     * @param number       题目数量，比�?10
+     * @param user         创建�?
      * @return ture / false
      */
     @Override
@@ -363,7 +401,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
         }
         // 1. 定义系统 Prompt
-        String systemPrompt = "你是一位专业的程序员面试官，你要帮我生�?{数量} �?{方向} 面试题，要求输出格式如下：\n" +
+        String systemPrompt = "你是一位专业的程序员面试官，你要帮我生�?{数量} �?{方向} 面试题，要求输出格式如下：\n" +
                 "\n" +
                 "1. 什么是 Java 中的反射？\n" +
                 "2. Java 8 中的 Stream API 有什么作用？\n" +
@@ -373,18 +411,18 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 "\n" +
                 "接下来我会给你要生成的题目{数量}、以及题目{方向}\n";
         // 2. 拼接用户 Prompt
-        String userPrompt = String.format("题目数量�?s, 题目方向�?s", number, questionType);
+        String userPrompt = String.format("题目数量�?s, 题目方向�?s", number, questionType);
         // 3. 调用 AI 生成题目
         String answer = aiManager.doChat(systemPrompt, userPrompt);
         // 4. 对题目进行预处理
         // 按行拆分
         List<String> lines = Arrays.asList(answer.split("\n"));
-        // 移除序号�?`
+        // 移除序号�?`
         List<String> titleList = lines.stream()
                 .map(line -> StrUtil.removePrefix(line, StrUtil.subBefore(line, " ", false))) // 移除序号
                 .map(line -> line.replace("`", "")) // 移除 `
                 .collect(Collectors.toList());
-        // 5. 保存题目到数据库�?
+        // 5. 保存题目到数据库�?
         List<Question> questionList = titleList.stream().map(title -> {
             Question question = new Question();
             question.setTitle(title);
@@ -413,7 +451,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 "\n" +
                 "1. 题解的语句要自然流畅\n" +
                 "2. 题解可以先给出总结性的回答，再详细解释\n" +
-                "3. 要使�?Markdown 语法输出\n" +
+                "3. 要使�?Markdown 语法输出\n" +
                 "\n" +
                 "除此之外，请不要输出任何多余的内容，不要输出开头、也不要输出结尾，只输出题解。\n" +
                 "\n" +

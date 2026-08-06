@@ -96,6 +96,30 @@ create table if not exists code_submission
     index idx_userId (userId)
 ) comment '代码提交记录' collate = utf8mb4_unicode_ci;
 
+-- MQ 同步任务执行记录表
+create table if not exists mq_sync_record
+(
+    id               bigint auto_increment comment '主键' primary key,
+    question_id      bigint                             null comment '数据 ID（题目 ID）',
+    action           varchar(20)                        null comment '操作类型：SAVE/UPDATE/DELETE',
+    message_id       varchar(128)                       null comment '消息 ID（RabbitMQ messageId）',
+    message_body     text                               null comment '消息体 JSON 快照',
+    version          bigint                             null comment '消息版本号',
+    priority         int      default 5                 null comment '消息优先级',
+    status           varchar(20)                        null comment '处理状态：PROCESSING/SUCCESS/FAILED/SKIPPED',
+    retry_count      int      default 0                 null comment '重试次数',
+    error_message    varchar(2048)                      null comment '错误信息',
+    error_stack      text                               null comment '错误堆栈',
+    cost_ms          bigint                             null comment '处理耗时（毫秒）',
+    message_time     datetime                           null comment '消息生成时间',
+    process_start_time datetime                         null comment '处理开始时间',
+    process_end_time   datetime                         null comment '处理结束时间',
+    create_time      datetime default CURRENT_TIMESTAMP null comment '记录创建时间',
+    index idx_question_id (question_id),
+    index idx_status (status),
+    index idx_create_time (create_time)
+) comment 'MQ 同步任务执行记录' collate = utf8mb4_unicode_ci;
+
 -- 用户扩展字段
 ALTER TABLE user
     ADD phoneNumber        VARCHAR(20) COMMENT '手机号',

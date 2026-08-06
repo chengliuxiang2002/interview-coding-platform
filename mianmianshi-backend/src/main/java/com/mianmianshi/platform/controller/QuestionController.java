@@ -41,8 +41,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * 题目接口
  *
- * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
- * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
+ * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
+ * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
  */
 @RestController
 @RequestMapping("/question")
@@ -77,14 +77,16 @@ public class QuestionController {
         }
         // 数据校验
         questionService.validQuestion(question, true);
-        // todo 填充默认�?
+        // todo 填充默认�?
         User loginUser = userService.getLoginUser(request);
         question.setUserId(loginUser.getId());
-        // 写入数据�?
+        // 写入数据�?
         boolean result = questionService.save(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         // 返回新写入的数据 id
         long newQuestionId = question.getId();
+        // 通过 MQ 异步同步到 ES
+        questionService.syncQuestionToEsByMq(newQuestionId, "SAVE");
         return ResultUtils.success(newQuestionId);
     }
 
@@ -110,9 +112,11 @@ public class QuestionController {
         if (!oldQuestion.getUserId().equals(user.getId()) && !userService.isAdmin(request)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 操作数据�?
+        // 操作数据�?
         boolean result = questionService.removeById(id);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 通过 MQ 异步同步删除到 ES
+        questionService.syncQuestionToEsByMq(id, "DELETE");
         return ResultUtils.success(true);
     }
 
@@ -141,14 +145,16 @@ public class QuestionController {
         long id = questionUpdateRequest.getId();
         Question oldQuestion = questionService.getById(id);
         ThrowUtils.throwIf(oldQuestion == null, ErrorCode.NOT_FOUND_ERROR);
-        // 操作数据�?
+        // 操作数据�?
         boolean result = questionService.updateById(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 通过 MQ 异步同步到 ES
+        questionService.syncQuestionToEsByMq(id, "UPDATE");
         return ResultUtils.success(true);
     }
 
     /**
-     * 根据 id 获取题目（封装类�?
+     * 根据 id 获取题目（封装类�?
      *
      * @param id
      * @return
@@ -156,25 +162,25 @@ public class QuestionController {
     @GetMapping("/get/vo")
     public BaseResponse<QuestionVO> getQuestionVOById(long id, HttpServletRequest request) {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
-        // 检测和处置爬虫（可以自行扩展为 - 登录后才能获取到答案�?
+        // 检测和处置爬虫（可以自行扩展为 - 登录后才能获取到答案�?
         User loginUser = userService.getLoginUserPermitNull(request);
         if (loginUser != null) {
             crawlerDetect(loginUser.getId());
         }
-        // 友情提示，对于敏感的内容，可以再打印一些日志，记录用户访问的内�?
-        // 查询数据�?
+        // 友情提示，对于敏感的内容，可以再打印一些日志，记录用户访问的内�?
+        // 查询数据�?
         Question question = questionService.getById(id);
         ThrowUtils.throwIf(question == null, ErrorCode.NOT_FOUND_ERROR);
-        // 获取封装�?
+        // 获取封装�?
         return ResultUtils.success(questionService.getQuestionVO(question, request));
     }
 
-    // 仅是为了方便，才把这段代码写到这�?
+    // 仅是为了方便，才把这段代码写到这�?
     @Resource
     private CounterManager counterManager;
 
     /**
-     * 检测爬�?
+     * 检测爬�?
      *
      * @param loginUserId
      */
@@ -185,18 +191,18 @@ public class QuestionController {
         final int BAN_COUNT = 20;
         // 拼接访问 key
         String key = String.format("user:access:%s", loginUserId);
-        // 统计一分钟内访问次数，180 秒过�?
+        // 统计一分钟内访问次数，180 秒过�?
         long count = counterManager.incrAndGetCounter(key, 1, TimeUnit.MINUTES, 180);
         // 是否封号
         if (count > BAN_COUNT) {
-            // 踢下�?
+            // 踢下�?
             StpUtil.kickout(loginUserId);
             // 封号
             User updateUser = new User();
             updateUser.setId(loginUserId);
             updateUser.setUserRole("ban");
             userService.updateById(updateUser);
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "访问次数过多，已被封�?);
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "访问次数过多，已被封�?);
         }
         // 是否告警
         if (count == WARN_COUNT) {
@@ -215,13 +221,13 @@ public class QuestionController {
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<Question>> listQuestionByPage(@RequestBody QuestionQueryRequest questionQueryRequest) {
         ThrowUtils.throwIf(questionQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        // 查询数据�?
+        // 查询数据�?
         Page<Question> questionPage = questionService.listQuestionByPage(questionQueryRequest);
         return ResultUtils.success(questionPage);
     }
 
     /**
-     * 分页获取题目列表（封装类�?
+     * 分页获取题目列表（封装类�?
      *
      * @param questionQueryRequest
      * @param request
@@ -234,9 +240,9 @@ public class QuestionController {
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
-        // 查询数据�?
+        // 查询数据�?
         Page<Question> questionPage = questionService.listQuestionByPage(questionQueryRequest);
-        // 获取封装�?
+        // 获取封装�?
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
 
@@ -260,9 +266,9 @@ public class QuestionController {
         try {
             entry = SphU.entry(SentinelConstant.listQuestionVOByPage, EntryType.IN, 1, remoteAddr);
             // 被保护的业务逻辑
-            // 查询数据�?
+            // 查询数据�?
             Page<Question> questionPage = questionService.listQuestionByPage(questionQueryRequest);
-            // 获取封装�?
+            // 获取封装�?
             return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
         } catch (Throwable ex) {
             // 业务异常
@@ -294,7 +300,7 @@ public class QuestionController {
 
 
     /**
-     * 分页获取当前登录用户创建的题目列�?
+     * 分页获取当前登录用户创建的题目列�?
      *
      * @param questionQueryRequest
      * @param request
@@ -304,22 +310,22 @@ public class QuestionController {
     public BaseResponse<Page<QuestionVO>> listMyQuestionVOByPage(@RequestBody QuestionQueryRequest questionQueryRequest,
                                                                  HttpServletRequest request) {
         ThrowUtils.throwIf(questionQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        // 补充查询条件，只查询当前登录用户的数�?
+        // 补充查询条件，只查询当前登录用户的数�?
         User loginUser = userService.getLoginUser(request);
         questionQueryRequest.setUserId(loginUser.getId());
         long current = questionQueryRequest.getCurrent();
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
-        // 查询数据�?
+        // 查询数据�?
         Page<Question> questionPage = questionService.page(new Page<>(current, size),
                 questionService.getQueryWrapper(questionQueryRequest));
-        // 获取封装�?
+        // 获取封装�?
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
 
     /**
-     * 编辑题目（给用户使用�?
+     * 编辑题目（给用户使用�?
      *
      * @param questionEditRequest
      * @param request
@@ -349,9 +355,11 @@ public class QuestionController {
         if (!oldQuestion.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 操作数据�?
+        // 操作数据�?
         boolean result = questionService.updateById(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 通过 MQ 异步同步到 ES
+        questionService.syncQuestionToEsByMq(id, "UPDATE");
         return ResultUtils.success(true);
     }
 
@@ -363,7 +371,7 @@ public class QuestionController {
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 200, ErrorCode.PARAMS_ERROR);
-        // todo 取消注释开�?ES（须先配�?ES�?
+        // todo 取消注释开�?ES（须先配�?ES�?
         // 查询 ES
         // Page<Question> questionPage = questionService.searchFromEs(questionQueryRequest);
         // 查询数据库（作为没有 ES 的降级方案）
