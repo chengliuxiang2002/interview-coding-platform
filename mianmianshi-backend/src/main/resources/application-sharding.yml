@@ -1,0 +1,145 @@
+# ============================================
+# ShardingSphere 分库分表配置
+# 激活方式: spring.profiles.include=sharding
+# 或 Nacos 动态下发 (DataId: mianmianshi-sharding.yaml)
+# ============================================
+
+spring:
+  autoconfigure:
+    # 排除 Druid 自动配置，由 ShardingSphere 统一管理数据源
+    exclude: com.alibaba.druid.spring.boot.autoconfigure.DruidDataSourceAutoConfigure
+
+  shardingsphere:
+    mode:
+      type: Memory  # 生产可改为 Cluster (ZooKeeper) 实现配置一致
+    datasource:
+      names: ds0,ds1
+      ds0:
+        type: com.alibaba.druid.pool.DruidDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://localhost:3306/mianmianshi_db0?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: 123456
+      ds1:
+        type: com.alibaba.druid.pool.DruidDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://localhost:3306/mianmianshi_db1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: 123456
+
+    rules:
+      sharding:
+        # ========== 广播表（每个库都有全量数据） ==========
+        broadcastTables:
+          - user
+          - question_bank
+
+        # ========== 分片表规则 ==========
+        tables:
+          question:
+            actualDataNodes: ds$->{0..1}.question_$->{0..1}
+            databaseStrategy:
+              standard:
+                shardingColumn: id
+                shardingAlgorithmName: question_db_inline
+            tableStrategy:
+              standard:
+                shardingColumn: id
+                shardingAlgorithmName: question_tbl_inline
+
+          question_bank_question:
+            actualDataNodes: ds$->{0..1}.question_bank_question_$->{0..1}
+            databaseStrategy:
+              standard:
+                shardingColumn: question_id
+                shardingAlgorithmName: qbq_db_inline
+            tableStrategy:
+              standard:
+                shardingColumn: question_id
+                shardingAlgorithmName: qbq_tbl_inline
+
+          code_submission:
+            actualDataNodes: ds$->{0..1}.code_submission_$->{0..3}
+            databaseStrategy:
+              standard:
+                shardingColumn: user_id
+                shardingAlgorithmName: cs_db_mod
+            tableStrategy:
+              standard:
+                shardingColumn: user_id
+                shardingAlgorithmName: cs_tbl_mod
+
+          mq_sync_record:
+            actualDataNodes: ds$->{0..1}.mq_sync_record_$->{2025..2030}
+            databaseStrategy:
+              standard:
+                shardingColumn: create_time
+                shardingAlgorithmName: mq_db_year
+            tableStrategy:
+              standard:
+                shardingColumn: create_time
+                shardingAlgorithmName: mq_tbl_year
+
+        # ========== 分片算法 ==========
+        shardingAlgorithms:
+          question_db_inline:
+            type: INLINE
+            props:
+              algorithm-expression: ds$->{id % 2}
+          question_tbl_inline:
+            type: INLINE
+            props:
+              algorithm-expression: question_$->{id % 2}
+
+          qbq_db_inline:
+            type: INLINE
+            props:
+              algorithm-expression: ds$->{question_id % 2}
+          qbq_tbl_inline:
+            type: INLINE
+            props:
+              algorithm-expression: question_bank_question_$->{question_id % 2}
+
+          # code_submission 使用自定义算法
+          cs_db_mod:
+            type: CLASS_BASED
+            props:
+              strategy: STANDARD
+              algorithmClassName: com.mianmianshi.platform.sharding.UserIdModShardingAlgorithm
+              sharding-count: "2"
+          cs_tbl_mod:
+            type: CLASS_BASED
+            props:
+              strategy: STANDARD
+              algorithmClassName: com.mianmianshi.platform.sharding.UserIdModShardingAlgorithm
+              sharding-count: "4"
+
+          # mq_sync_record 按年分片
+          mq_db_year:
+            type: CLASS_BASED
+            props:
+              strategy: STANDARD
+              algorithmClassName: com.mianmianshi.platform.sharding.YearBasedShardingAlgorithm
+              start-year: "2025"
+              end-year: "2030"
+          mq_tbl_year:
+            type: CLASS_BASED
+            props:
+              strategy: STANDARD
+              algorithmClassName: com.mianmianshi.platform.sharding.YearBasedShardingAlgorithm
+              start-year: "2025"
+              end-year: "2030"
+
+    props:
+      sql-show: true                                 # 开发环境打印 SQL（生产 false）
+      sql-simple: false
+      max-connections-size-per-query: 1
+      kernel-executor-size: 32
+      check-table-metadata-enabled: true             # 启动时校验表元数据
+
+# ============================================
+# 分库分表开关 & 回滚开关
+# ============================================
+sharding:
+  enabled: false                                     # 默认关闭，灰度时通过 Nacos 打开
+  rollback-enabled: false

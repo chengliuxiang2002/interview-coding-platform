@@ -21,10 +21,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Sentinel 限流熔断规则管理�?
+ * Sentinel 限流熔断规则管理�?
  *
- * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
- * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
+ * @author <a href="https://github.com/liyupi">程序员鱼�?/a>
+ * @from <a href="https://www.code-nav.cn">编程导航学习�?/a>
  */
 @Component
 public class SentinelRulesManager {
@@ -37,46 +37,56 @@ public class SentinelRulesManager {
     }
 
     /**
-     * 初始化限流规�?
+     * 初始化限流规�?
      */
     public void initFlowRules() {
-        // �?IP 查看题目列表限流规则
+        // �?IP 查看题目列表限流规则
         ParamFlowRule rule = new ParamFlowRule(SentinelConstant.listQuestionVOByPage)
-                .setParamIdx(0) // 对第 0 个参数限流，�?IP 地址
-                .setCount(60) // 每分钟最�?60 �?
-                .setDurationInSec(60); // 规则的统计周期为 60 �?
+                .setParamIdx(0) // 对第 0 个参数限流，�?IP 地址
+                .setCount(60) // 每分钟最�?60 �?
+                .setDurationInSec(60); // 规则的统计周期为 60 �?
         ParamFlowRuleManager.loadRules(Collections.singletonList(rule));
     }
 
     /**
-     * 初始化降级规�?
+     * 初始化降级规�?
      */
     public void initDegradeRules() {
-        // �?IP 查看题目列表熔断规则
+        // �?IP 查看题目列表熔断规则
         DegradeRule slowCallRule = new DegradeRule(SentinelConstant.listQuestionVOByPage)
                 .setGrade(CircuitBreakerStrategy.SLOW_REQUEST_RATIO.getType())
-                .setCount(0.2) // 慢调用比例大�?20%
-                .setTimeWindow(60) // 熔断持续时间 60 �?
-                .setStatIntervalMs(30 * 1000) // 统计时长 30 �?
+                .setCount(0.2) // 慢调用比例大�?20%
+                .setTimeWindow(60) // 熔断持续时间 60 �?
+                .setStatIntervalMs(30 * 1000) // 统计时长 30 �?
                 .setMinRequestAmount(10) // 最小请求数
-                .setSlowRatioThreshold(3); // 响应时间超过 3 �?
+                .setSlowRatioThreshold(3); // 响应时间超过 3 �?
 
         DegradeRule errorRateRule = new DegradeRule(SentinelConstant.listQuestionVOByPage)
                 .setGrade(CircuitBreakerStrategy.ERROR_RATIO.getType())
-                .setCount(0.1) // 异常率大�?10%
-                .setTimeWindow(60) // 熔断持续时间 60 �?
-                .setStatIntervalMs(30 * 1000) // 统计时长 30 �?
+                .setCount(0.1) // 异常率大于 10%
+                .setTimeWindow(60) // 熔断持续时间 60 秒
+                .setStatIntervalMs(30 * 1000) // 统计时长 30 秒
                 .setMinRequestAmount(10); // 最小请求数
 
+        // 代码提交查询慢 SQL 熔断规则（分库分表后保护后端）
+        DegradeRule csSlowSqlRule = new DegradeRule("code_submission_query")
+                .setGrade(CircuitBreakerStrategy.SLOW_REQUEST_RATIO.getType())
+                .setCount(0.3)                          // 慢调用比例 > 30%
+                .setTimeWindow(120)                     // 熔断持续 120 秒
+                .setStatIntervalMs(60 * 1000)           // 统计 60 秒
+                .setMinRequestAmount(5)                 // 最小请求数 5
+                .setSlowRatioThreshold(5);              // RT > 5s 算慢调用
+
         // 加载规则
-        DegradeRuleManager.loadRules(Arrays.asList(slowCallRule, errorRateRule));
+        DegradeRuleManager.loadRules(Arrays.asList(
+                slowCallRule, errorRateRule, csSlowSqlRule));
     }
 
     /**
      * 持久化配置为本地文件
      */
     public void listenRules() throws Exception {
-        // 获取项目根目�?
+        // 获取项目根目�?
         String rootPath = System.getProperty("user.dir");
         // sentinel 目录路径
         File sentinelDir = new File(rootPath, "sentinel");

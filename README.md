@@ -122,3 +122,15 @@ npm run dev
 ## 许可证
 
 本项目仅用于学习交流和个人简历展示。
+
+## RabbitMQ 部署步骤
+# 1. 启动 RabbitMQ
+docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 `
+  -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=admin123 `
+  rabbitmq:3.11-management
+
+# 2. 导入 mq_sync_record 建表
+mysql -u root -p mianmianshi < sql/create_table.sql
+
+# 3. 启动项目
+mvn spring-boot:run
